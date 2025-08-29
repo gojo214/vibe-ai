@@ -1,41 +1,9 @@
-import { z } from 'zod';
+import { client } from '@/lib/prisma';
 import { baseProcedure, createTRPCRouter } from '../init';
-import { text } from 'stream/consumers';
-import { inngest } from '@/inngest/client';
+import { messagesRouter } from '@/modules/messages/server/procedures';
 
 export const appRouter = createTRPCRouter({
-  invoke: baseProcedure.input(
-    z.object({
-      value: z.string()
-    })
-  ).mutation(async ({ input }) => {
-    await inngest.send({
-      name: 'test/hello.world',
-      data: {
-        value: input.value
-      }
-    })
-
-    return { ok: "success" }
-  }),
-  createAI: baseProcedure.input(
-    z.object({ 
-      text: z.string(),
-    }),
-  ).query((opts) => {
-    return {
-      greetings: `hello ${opts.input.text}`
-    }
-  }),
-  hello: baseProcedure.input(
-    z.object({
-      text: z.string(),
-    })
-  ).query((opts) => {
-    return {
-      greetings: `hello ${opts.input.text}`
-    }
-  })
+  message: messagesRouter
 });
 // export type definition of API
 export type AppRouter = typeof appRouter;
