@@ -1,21 +1,34 @@
 import Sandbox from "@e2b/code-interpreter";
-import { Agent, openai, createAgent, createTool, createNetwork } from "@inngest/agent-kit";
+import {
+  openai,
+  createAgent,
+  createTool,
+  createNetwork,
+  Tool
+} from "@inngest/agent-kit";
 import { inngest } from "./client";
 import { getSandbox, lastAssistantTextMessageContent } from "./utils";
 import z from "zod";
 import { PROMPT } from "../../prompt";
+import { client } from "@/lib/prisma";
 
-export const helloWorld = inngest.createFunction(
-  { id: "hello-world" },
-  { event: "test/hello.world" },
+interface AgentState {
+  summary: string;
+  files: { [path: string]: string }
+}
+
+export const codeAgentFunction = inngest.createFunction(
+  { id: "code-agent" },
+  { event: "code-agent/run" },
   async ({ event, step }) => {
     const sandboxId = await step.run("get-sandbox-id", async () => {
       const sandbox = await Sandbox.create("build-ai");
       return sandbox.sandboxId;
     });
-    const codeAgent = createAgent({
+    const codeAgent = createAgent<AgentState>({
       name: "Code Agent",
-     system: PROMPT,
+      description: "An expert coding agent",
+      system: PROMPT,
       model: openai({
         model: "gpt-4o",
         defaultParameters: {
@@ -66,7 +79,7 @@ export const helloWorld = inngest.createFunction(
               })
             ),
           }),
-          handler: async ({ files }, { step, network }) => {
+          handler: async ({ files }, { step, network }: Tool.Options<AgentState>) => {
             const newFiles = await step?.run(
               "createOrUpdateFiles",
               async () => {
@@ -115,7 +128,7 @@ export const helloWorld = inngest.createFunction(
           },
         }),
       ],
-       lifecycle: {
+      lifecycle: {
         onResponse: async ({ result, network }) => {
           const lastAssistantMessageText =
             lastAssistantTextMessageContent(result);
@@ -131,7 +144,7 @@ export const helloWorld = inngest.createFunction(
       },
     });
 
-     const newtwork = createNetwork({
+    const newtwork = createNetwork<AgentState>({
       name: "coding-agent-network",
       agents: [codeAgent],
       maxIter: 15,
@@ -148,17 +161,46 @@ export const helloWorld = inngest.createFunction(
 
     const result = await newtwork.run(event.data.value);
 
+    const isError =
+      !result.state.data.summary ||
+      Object.keys(result.state.data.files || {}).length === 0;
     const sandboxUrl = await step.run("get-sandbox-url", async () => {
       const sandbox = await getSandbox(sandboxId);
       const host = sandbox.getHost(3000);
       return `https://${host}`;
     });
 
+    await step.run("save-result", async () => {
+      if (isError) {
+        return await client.message.create({
+          data: {
+            content: "Something went wrong. Please try again.",
+            role: "ASSISTANT",
+            type: "ERROR",
+          },
+        });
+      }
+      return await client.message.create({
+        data: {
+          content: result.state.data.summary,
+          role: "ASSISTANT",
+          type: "RESULT",
+          fragment: {
+            create: {
+              sandboxUrl: sandboxUrl,
+              title: "Fragment",
+              files: result.state.data.files,
+            },
+          },
+        },
+      });
+    });
+
     return {
       url: sandboxUrl,
       title: "Fragment",
       files: result.state.data.files,
-      summary: result.state.data.summary
+      summary: result.state.data.summary,
     };
   }
 );
