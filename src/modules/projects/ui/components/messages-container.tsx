@@ -26,7 +26,7 @@ const MessagesContainer = ({ projectId, activeFragment, setActiveFragment }: Pro
             (message) => message.role === "ASSISTANT" && !!message.fragment
         );
 
-        if (lastAssistantMessageWithFragment) {
+    if (lastAssistantMessageWithFragment) {
             setActiveFragment(lastAssistantMessageWithFragment.fragment);
         }
 
