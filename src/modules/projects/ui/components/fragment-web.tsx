@@ -1,8 +1,9 @@
 import { Button } from "@/components/ui/button";
+import { Hint } from "@/components/ui/hint";
 import { Fragment } from "@/generated/prisma";
 import { RefreshCcwIcon } from "lucide-react";
 import React, { useState } from "react";
-import { Hint } from "./hint";
+
 
 interface Props {
   data: Fragment;
